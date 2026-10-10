@@ -1,14 +1,27 @@
-// Clear Road front end: search, prediction-first panel, time machine, map lines. Plain JS, no build.
+// Clear Road front end: search, prediction panel, map lines. Plain JS, no build.
+// Icons: Lucide (<i data-lucide="name">), turned into SVG by lucide.createIcons().
 const $ = (id) => document.getElementById(id);
 const KL_CENTER = [3.1, 101.67];
+// Tailwind classes per mode (full class names so Tailwind can find them)
 const MODE_INFO = {
-  car: { icon: "🚗", label: "Car", verdict: "Drive", color: "#1a73e8" },
-  train: { icon: "🚆", label: "Train", verdict: "Take the train", color: "#1e8e3e" },
-  bus: { icon: "🚌", label: "Bus", verdict: "Take the bus", color: "#8e24aa" },
+  car: {
+    icon: "car", label: "Car", verdict: "Drive",
+    tint: "bg-blue-50 border-blue-200", edge: "border-blue-200", ink: "text-blue-950", accent: "text-blue-600",
+    solid: "bg-blue-600", soft: "bg-blue-50 text-blue-600", sel: "bg-blue-50 shadow-[inset_4px_0_0_var(--color-blue-600)]",
+  },
+  train: {
+    icon: "train-front", label: "Train", verdict: "Take the train",
+    tint: "bg-green-50 border-green-200", edge: "border-green-200", ink: "text-green-950", accent: "text-green-600",
+    solid: "bg-green-600", soft: "bg-green-50 text-green-600", sel: "bg-green-50 shadow-[inset_4px_0_0_var(--color-green-600)]",
+  },
+  bus: {
+    icon: "bus", label: "Bus", verdict: "Take the bus",
+    tint: "bg-purple-50 border-purple-200", edge: "border-purple-200", ink: "text-purple-950", accent: "text-purple-600",
+    solid: "bg-purple-600", soft: "bg-purple-50 text-purple-600", sel: "bg-purple-50 shadow-[inset_4px_0_0_var(--color-purple-600)]",
+  },
 };
 const GREY = "#9aa0a6";
-const BUS_COLOR = "#8e24aa";
-const PLAY_MS = 650;
+const BUS_COLOR = "#9333ea";
 
 const PLACES = {
   puchong: { name: "IOI Puchong Jaya LRT station", lat: 3.048101, lon: 101.62095 },
@@ -21,16 +34,12 @@ const state = {
   plan: null,
   selected: null,
   rainMoved: false,
-  playing: false,
 };
 let map = null;
 let routeLayer = null;
 let markerLayer = null;
-let trafficLayer = null;      // coloured car line used by the time machine
-let trafficSegs = [];         // [{poly, w}]
 let routeBounds = null;
 let fitZoom = null;
-let playTimer = null;
 
 // ---------- helpers ----------
 function fmtMin(m) {
@@ -44,6 +53,18 @@ function el(tag, cls, text) {
   if (cls) e.className = cls;
   if (text != null) e.textContent = text;
   return e;
+}
+
+// <i data-lucide="name"> placeholder; drawIcons() swaps it for the SVG (classes are kept)
+function icon(name, cls = "size-4 shrink-0") {
+  const i = document.createElement("i");
+  i.setAttribute("data-lucide", name);
+  i.className = cls;
+  return i;
+}
+
+function drawIcons() {
+  if (window.lucide) window.lucide.createIcons();
 }
 
 function isoDate(d) {
@@ -78,9 +99,8 @@ function option(mode) {
   return state.plan ? state.plan.options.find((o) => o.mode === mode) : null;
 }
 
-function trafficColor(localMult) {
-  const table = (state.plan && state.plan.traffic_colors) || [[1.25, "#1e9e4a"], [1.6, "#f29900"], [2.0, "#e8453c"], [99, "#a50e0e"]];
-  return table.find(([limit]) => localMult < limit)[1];
+function trafficDotColor(mult) {
+  return mult < 1.3 ? "#16a34a" : mult < 1.7 ? "#f59e0b" : "#dc2626";
 }
 
 async function api(url, options) {
@@ -97,7 +117,7 @@ function setStatus(text) {
 }
 
 function setError(text) {
-  $("error").textContent = text ? `⚠ ${text}` : "";
+  $("error").textContent = text || "";
   $("error").classList.toggle("hidden", !text);
 }
 
@@ -225,69 +245,6 @@ function drawMap(refit) {
   if (refit !== false) fitRoute();
 }
 
-// ---------- time machine: recolour the car route for any predicted slot ----------
-function showTrafficLayer() {
-  if (!map) return;
-  hideTrafficLayer();
-  const car = option("car");
-  trafficLayer = L.layerGroup().addTo(map);
-  line(car.coords, { color: "#174ea6", weight: 10, opacity: 0.85 }).addTo(trafficLayer);
-  trafficSegs = car.segments.map((s) => ({ w: s.w, poly: line(s.coords, { color: s.color, weight: 6 }).addTo(trafficLayer) }));
-}
-
-function hideTrafficLayer() {
-  if (trafficLayer && map) map.removeLayer(trafficLayer);
-  trafficLayer = null;
-  trafficSegs = [];
-}
-
-function recolorCar(mult) {
-  trafficSegs.forEach((s) => s.poly.setStyle({ color: trafficColor(1 + (mult - 1) * s.w) }));
-}
-
-function showSlot(i) {
-  const s = state.plan.slots[i];
-  document.querySelectorAll(".col").forEach((c, j) => c.classList.toggle("playing", j === i));
-  recolorCar(s.mult);
-  const badge = $("mapBadge");
-  badge.innerHTML = "";
-  badge.append(el("span", "bt", s.time));
-  const carSpan = el("span", "bc", `🚗 ${fmtMin(s.car)}`);
-  badge.append(carSpan);
-  if (s.train != null) badge.append(el("span", "bc", `🚆 ${fmtMin(s.train)}`));
-  if (s.rain >= 0.5) badge.append(el("span", "bc", `🌧 ${s.rain} mm`));
-  const win = s.train != null && s.train < s.car ? "🚆 train wins" : "🚗 car wins";
-  badge.append(el("span", "bw", win));
-  badge.classList.remove("hidden");
-}
-
-function stopPlay() {
-  clearInterval(playTimer);
-  playTimer = null;
-  state.playing = false;
-  $("play").textContent = "▶ Play";
-  $("play").classList.remove("on");
-  $("mapBadge").classList.add("hidden");
-  document.querySelectorAll(".col").forEach((c) => c.classList.remove("playing"));
-  hideTrafficLayer();
-}
-
-function togglePlay() {
-  if (!state.plan) return;
-  if (state.playing) { stopPlay(); return; }
-  state.playing = true;
-  $("play").textContent = "⏸ Pause";
-  $("play").classList.add("on");
-  showTrafficLayer();
-  let i = 0;
-  showSlot(i);
-  playTimer = setInterval(() => {
-    i += 1;
-    if (i >= state.plan.slots.length) { stopPlay(); return; }
-    showSlot(i);
-  }, PLAY_MS);
-}
-
 // ---------- search / autocomplete ----------
 function setupSearch(which) {
   const input = $(`${which}Input`);
@@ -312,17 +269,19 @@ function setupSearch(which) {
     results.forEach((r) => items.push(r));
     if (!items.length) { close(); return; }
     items.forEach((it, i) => {
-      const btn = el("button");
+      const btn = el("button", "flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-left hover:bg-zinc-100");
       btn.type = "button";
-      const ic = el("span", "ico", it.special ? "◎" : (/station/i.test(it.name) ? "🚉" : "📍"));
+      const ic = el("span", "pt-0.5 text-zinc-500");
+      ic.append(icon(it.special ? "locate" : (/station/i.test(it.name) ? "train-front" : "map-pin")));
       const txt = el("span");
-      txt.appendChild(el("div", "nm", it.special ? "Your location" : it.name));
-      if (!it.special && it.address) txt.appendChild(el("div", "ad", it.address));
+      txt.appendChild(el("div", "text-sm font-medium", it.special ? "Your location" : it.name));
+      if (!it.special && it.address) txt.appendChild(el("div", "text-xs text-zinc-500", it.address));
       btn.append(ic, txt);
       btn.addEventListener("mousedown", (e) => { e.preventDefault(); pickIndex(i); });
       list.appendChild(btn);
     });
     list.classList.remove("hidden");
+    drawIcons();
   }
 
   function pickIndex(i) {
@@ -346,7 +305,7 @@ function setupSearch(which) {
     const q = input.value.trim();
     if (q.length < 2) { render([], which === "from"); return; }
     list.innerHTML = "";
-    list.append(el("div", "status", "Searching…"));
+    list.append(el("div", "px-3 py-2.5 text-zinc-500", "Searching…"));
     list.classList.remove("hidden");
     timer = setTimeout(async () => {
       try {
@@ -364,7 +323,7 @@ function setupSearch(which) {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       active = Math.max(0, Math.min(buttons.length - 1, active + (e.key === "ArrowDown" ? 1 : -1)));
-      buttons.forEach((b, i) => b.classList.toggle("active", i === active));
+      buttons.forEach((b, i) => b.classList.toggle("bg-zinc-100", i === active));
     } else if (e.key === "Enter") {
       e.preventDefault();
       if (!list.classList.contains("hidden") && items.length) pickIndex(active >= 0 ? active : 0);
@@ -380,133 +339,142 @@ function renderHero() {
   const rec = option(p.recommended);
   const car = option("car");
   const train = option("train");
+  const info = MODE_INFO[rec.mode];
   const box = $("hero");
   box.innerHTML = "";
-  box.className = `hero hero-${rec.mode}`;
+  box.className = `m-3 rounded-xl border p-4 max-md:mx-2.5 max-md:mt-1 ${info.tint}`;
 
-  const top = el("div", "hero-top");
-  top.append(el("span", "hero-tag", "✨ Predicted for " + new Date(`${p.date}T00:00`).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }) + ` · ${p.time}`));
-  box.append(top);
+  const day = new Date(`${p.date}T00:00`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+  const label = el("div", `inline-flex items-center gap-1.5 rounded-full border bg-white px-2.5 py-0.5 text-xs font-semibold ${info.edge} ${info.accent}`);
+  label.append(icon("sparkles", "size-3.5"), `AI prediction · ${day}, ${p.time}`);
+  box.append(label);
 
-  box.append(el("div", "hero-verdict", `${MODE_INFO[rec.mode].icon} ${MODE_INFO[rec.mode].verdict}`));
-  const when = el("div", "hero-when");
-  when.append("Leave ", el("b", null, p.time), " → arrive ", el("b", null, arrive(p.time, rec.minutes)));
-  when.append(el("span", "hero-mins", ` · ${fmtMin(rec.minutes)}`));
+  const verdict = el("div", `mt-3 mb-1.5 flex items-center gap-3 text-2xl font-bold tracking-tight max-md:text-xl ${info.ink}`);
+  const mark = el("span", `grid size-10 place-items-center rounded-[10px] text-white ${info.solid}`);
+  mark.append(icon(info.icon, "size-5"));
+  verdict.append(mark, el("span", null, info.verdict));
+  box.append(verdict);
+
+  const when = el("div", `text-[15px] ${info.ink}`);
+  when.append("Leave ", el("b", "font-semibold", p.time), " → Arrive ", el("b", "font-semibold", arrive(p.time, rec.minutes)));
+  when.append(el("span", "text-zinc-500", ` · ${fmtMin(rec.minutes)}`));
   box.append(when);
 
-  let reason = "";
+  if (rec.mode !== "car" && p.saved_minutes >= 1) {
+    box.append(el("span", "mt-2.5 inline-block rounded-full border border-green-200 bg-white px-2.5 py-0.5 text-xs font-semibold text-green-700",
+      `Saves ${Math.round(p.saved_minutes)} min vs driving`));
+  }
+
+  let reason;
   if (rec.mode !== "car") {
-    reason = `Driving arrives ${arrive(p.time, car.minutes)}: ${Math.round(p.saved_minutes)} min later` +
-      (car.delay_minutes >= 3 ? ` (${car.traffic.toLowerCase()} +${Math.round(car.delay_minutes)} min)` : "");
-    box.append(el("div", "hero-save", `Saves ${Math.round(p.saved_minutes)} min vs driving`));
+    reason = `Driving would arrive ${arrive(p.time, car.minutes)}` +
+      (car.delay_minutes >= 3 ? ` because of ${car.traffic.toLowerCase()} (+${Math.round(car.delay_minutes)} min).` : ".");
   } else if (train) {
-    reason = `Train arrives ${arrive(p.time, train.minutes)}: ${Math.round(train.minutes - car.minutes)} min later. ${car.traffic} on the road.`;
+    reason = `The train would arrive ${arrive(p.time, train.minutes)}, ${Math.round(train.minutes - car.minutes)} min later.`;
   } else {
     reason = "No train line near this trip.";
   }
-  box.append(el("div", "hero-reason", reason));
+  box.append(el("p", "mt-2.5 leading-relaxed text-zinc-600", reason));
 
   const w = p.weather;
-  const facts = el("div", "hero-facts");
-  const temp = w.temp_c != null ? `${Math.round(w.temp_c)}° · ` : "";
+  const facts = el("div", "mt-2.5 flex flex-wrap gap-x-3.5 gap-y-1.5 text-[12.5px] text-zinc-600");
+  const wx = el("span", "inline-flex items-center gap-1.5");
+  const temp = w.temp_c != null ? `${Math.round(w.temp_c)}°C · ` : "";
   const src = { "open-meteo": "forecast", override: "what-if", fallback: "no forecast" }[w.source] || w.source;
-  facts.append(el("span", null, `${w.rain_mm >= 0.5 ? "🌧" : "⛅"} ${temp}${w.rain_mm} mm rain (${src})`));
-  const dot = el("span", "dot");
-  dot.style.background = trafficColor(car.multiplier);
-  const tr = el("span");
+  wx.append(icon(w.rain_mm >= 0.5 ? "cloud-rain" : "cloud-sun", "size-3.5"), `${temp}${w.rain_mm} mm rain (${src})`);
+  facts.append(wx);
+  const tr = el("span", "inline-flex items-center gap-1.5");
+  const dot = el("span", "size-2 rounded-full");
+  dot.style.background = trafficDotColor(car.multiplier);
   tr.append(dot, `${car.traffic} on the road`);
   facts.append(tr);
-  if (p.sources.route === "estimate") facts.append(el("span", null, "road route estimated (offline)"));
+  if (p.sources.route === "estimate") facts.append(el("span", null, "Road route estimated (offline)"));
   box.append(facts);
 
   const best = p.best_departure;
   if (best.time !== p.time && best.saves >= 5) {
-    const tip = el("button", "hero-tip");
+    const tip = el("button", `mt-3 flex w-full items-center gap-2 rounded-lg border bg-white px-2.5 py-2 text-left text-[13px] hover:bg-zinc-50 ${info.edge}`);
     tip.type = "button";
-    tip.append("💡 Leave at ", el("b", null, best.time), ` by ${best.mode}: ${fmtMin(best.minutes)} (${Math.round(best.saves)} min less)`);
+    tip.append(icon("clock"), el("span", null, `Leave at ${best.time} by ${best.mode} instead: ${fmtMin(best.minutes)} (${Math.round(best.saves)} min less)`));
     tip.addEventListener("click", () => { $("time").value = best.time; plan(); });
     box.append(tip);
   }
+}
+
+// One-line description under each mode name
+function rowSubtitle(opt) {
+  if (opt.mode === "car") return `${opt.km} km · ${opt.traffic}`;
+  if (opt.mode === "train") {
+    const changes = opt.lines.length - 1;
+    return `${opt.lines.join(" → ")} · ${changes ? `${changes} change${changes > 1 ? "s" : ""}` : "direct"}`;
+  }
+  return "Estimate · road + stops";
 }
 
 function renderCompare() {
   const p = state.plan;
   const box = $("compare");
   box.innerHTML = "";
-  const max = Math.max(...p.options.map((o) => o.minutes));
+  box.append(el("div", "mx-0.5 mt-1 mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500", "Compare options"));
+  const list = el("div", "divide-y divide-zinc-200 overflow-hidden rounded-xl border border-zinc-200");
+  const fastest = Math.min(...p.options.map((o) => o.minutes));
   ["car", "train", "bus"].forEach((mode) => {
     const opt = option(mode);
-    const row = el("button", "row");
+    const info = MODE_INFO[mode];
+    const selected = mode === state.selected;
+    const row = el("button", "grid w-full grid-cols-[36px_1fr_auto_18px] items-center gap-3 px-3.5 py-3 text-left transition-colors " +
+      (selected ? info.sel : "bg-white hover:bg-zinc-50") + (opt ? " cursor-pointer" : " cursor-default opacity-45"));
     row.type = "button";
-    if (!opt) { row.classList.add("na"); row.disabled = true; }
-    if (mode === state.selected) row.classList.add("sel");
-    if (mode === "bus") row.classList.add("muted");
-    row.append(el("span", "row-ic", MODE_INFO[mode].icon));
-    const mid = el("span", "row-mid");
-    const name = el("span", "row-name", MODE_INFO[mode].label);
-    if (opt && mode === p.recommended) name.append(el("span", "pick", "AI PICK"));
-    if (mode === "bus") name.append(el("span", "est", "estimate"));
+    row.disabled = !opt;
+
+    const ic = el("span", `grid size-9 place-items-center rounded-[10px] ${info.soft}`);
+    ic.append(icon(info.icon, "size-[18px]"));
+    row.append(ic);
+
+    const mid = el("span", "flex min-w-0 flex-col gap-0.5");
+    const name = el("span", `flex items-center gap-2 text-[15px] font-semibold ${selected ? info.accent : ""}`, info.label);
+    if (opt && mode === p.recommended) name.append(el("span", "rounded-full bg-green-600 px-2 py-px text-[11px] font-semibold text-white", "Best"));
     mid.append(name);
-    const track = el("span", "row-track");
-    const bar = el("span", "row-bar");
-    bar.style.width = opt ? `${Math.max(8, (opt.minutes / max) * 100)}%` : "0";
-    bar.style.background = MODE_INFO[mode].color;
-    track.append(bar);
-    mid.append(track);
+    mid.append(el("span", "truncate text-[12.5px] text-zinc-500", opt ? rowSubtitle(opt) : "Not available for this trip"));
     row.append(mid);
-    const right = el("span", "row-right");
-    right.append(el("span", "row-min", opt ? `${mode === "bus" ? "~" : ""}${fmtMin(opt.minutes)}` : "n/a"));
-    if (opt) right.append(el("span", "row-arr", `arrive ${arrive(p.time, opt.minutes)}`));
-    row.append(right);
-    if (opt) row.addEventListener("click", () => selectMode(mode));
-    box.append(row);
-  });
-}
 
-function renderTimeMachine() {
-  const p = state.plan;
-  const strip = $("strip");
-  strip.innerHTML = "";
-  const all = p.slots.flatMap((s) => (s.train != null ? [s.car, s.train] : [s.car]));
-  const max = Math.max(...all);
-  const lo = Math.min(...all) * 0.6;  // start bars above zero so the rush-hour hump stands out
-  const pct = (v) => `${Math.max(6, ((v - lo) / (max - lo)) * 100)}%`;
-  p.slots.forEach((s) => {
-    const col = el("button", "col");
-    col.type = "button";
-    col.title = `${s.time}: car ${fmtMin(s.car)}${s.train != null ? `, train ${fmtMin(s.train)}` : ""}`;
-    if (s.time === p.time) col.classList.add("chosen");
-    const bars = el("span", "bars");
-    const c = el("span", "b-car");
-    c.style.height = pct(s.car);
-    bars.append(c);
-    if (s.train != null) {
-      const t = el("span", "b-train");
-      t.style.height = pct(s.train);
-      bars.append(t);
+    const right = el("span", "flex flex-col items-end");
+    right.append(el("span", "text-base font-bold", opt ? `${mode === "bus" ? "~" : ""}${fmtMin(opt.minutes)}` : "–"));
+    if (opt) {
+      const diff = Math.round(opt.minutes - fastest);
+      right.append(diff >= 1
+        ? el("span", "text-xs text-amber-700", `+${diff} min · ${arrive(p.time, opt.minutes)}`)
+        : el("span", "text-xs text-zinc-500", `Arrive ${arrive(p.time, opt.minutes)}`));
     }
-    col.append(bars);
-    const trainWins = s.train != null && s.train < s.car;
-    col.append(el("span", "win", trainWins ? "🚆" : "🚗"));
-    col.append(el("span", "tl", s.time.endsWith(":00") || s.time.endsWith(":30") || s.time === p.time ? s.time : ""));
-    if (s.time === p.best_departure.time) col.append(el("span", "star", "★"));
-    col.addEventListener("click", () => { stopPlay(); $("time").value = s.time; plan(); });
-    strip.append(col);
+    row.append(right);
+
+    const check = el("span", `${info.accent} ${selected ? "" : "invisible"}`);
+    check.append(icon("check"));
+    row.append(check);
+    if (opt) row.addEventListener("click", () => selectMode(mode));
+    list.append(row);
   });
+  box.append(list);
 }
 
-function stepRow(icon, title, desc, mins, barColor, walk) {
-  const li = el("li", "step");
-  const rail = el("div", "rail");
-  rail.append(el("div", "ic", icon));
-  const bar = el("div", walk ? "bar walk" : "bar");
+function stepRow(iconName, title, desc, mins, barColor, walk) {
+  const li = el("li", "grid grid-cols-[32px_1fr_auto] gap-2.5 py-2");
+  const rail = el("div", "flex flex-col items-center");
+  const ic = el("div", "grid size-7 place-items-center rounded-full bg-zinc-100 text-zinc-700");
+  ic.append(icon(iconName, "size-[15px]"));
+  rail.append(ic);
+  const bar = el("div", walk ? "walk-bar mt-1 min-h-[18px] flex-1" : "mt-1 min-h-[18px] w-1 flex-1 rounded-sm");
   if (!walk) bar.style.background = barColor || "transparent";
   rail.append(bar);
   const body = el("div");
-  if (title instanceof Node) body.append(title); else body.append(el("div", "tt", title));
-  if (desc) body.append(el("div", "dd", desc));
-  li.append(rail, body, el("div", "mm", mins));
+  if (title instanceof Node) body.append(title); else body.append(el("div", "font-medium", title));
+  if (desc) body.append(el("div", "mt-0.5 text-[12.5px] text-zinc-500", desc));
+  li.append(rail, body, el("div", "whitespace-nowrap text-[13px] text-zinc-500", mins));
   return li;
+}
+
+function note(text) {
+  return el("p", "my-1.5 text-[13px] leading-relaxed text-zinc-500", text);
 }
 
 function renderDetail() {
@@ -514,50 +482,54 @@ function renderDetail() {
   const opt = option(state.selected);
   const box = $("detail");
   box.innerHTML = "";
-  $("detailTitle").textContent = `Route details · ${MODE_INFO[opt.mode].icon} ${MODE_INFO[opt.mode].label}`;
+  $("detailTitle").textContent = `Route details · ${MODE_INFO[opt.mode].label}`;
 
   if (opt.mode === "car") {
-    box.append(el("p", "note", `${opt.km} km. ${fmtMin(opt.freeflow_minutes)} on empty roads; our model predicts about ${fmtMin(opt.delay_minutes)} extra at ${p.time} (${opt.traffic.toLowerCase()}${p.weather.rain_mm >= 1 ? ", rain" : ""}).`));
-    const lg = el("div", "legend");
+    box.append(note(`${opt.km} km. ${fmtMin(opt.freeflow_minutes)} on empty roads; our model predicts about ${fmtMin(opt.delay_minutes)} extra at ${p.time} (${opt.traffic.toLowerCase()}${p.weather.rain_mm >= 1 ? ", rain" : ""}).`));
+    const lg = el("div", "mt-1.5 flex flex-wrap gap-3 text-xs text-zinc-500");
     [["#1e9e4a", "Light"], ["#f29900", "Slow"], ["#e8453c", "Heavy"], ["#a50e0e", "Very heavy"]].forEach(([c, t]) => {
-      const s = el("span"); const i = el("i"); i.style.background = c; s.append(i, t); lg.append(s);
+      const s = el("span", "inline-flex items-center gap-1");
+      const i = el("i", "inline-block h-1 w-4 rounded-sm");
+      i.style.background = c;
+      s.append(i, t);
+      lg.append(s);
     });
     box.append(lg);
     return;
   }
   if (opt.mode === "bus") {
-    box.append(el("p", "note", `Rough estimate: road time with bus stops, about ${opt.wait_minutes} min waiting, and 10 min walking. Real bus routes are not included yet.`));
+    box.append(note(`Rough estimate: road time with bus stops, about ${opt.wait_minutes} min waiting, and 10 min walking. Real bus routes are not included yet.`));
     return;
   }
-  const ul = el("ul", "steps");
+  const ul = el("ul", "mt-1");
   opt.legs.forEach((leg, i) => {
     if (leg.type === "walk" || leg.type === "feeder") {
       const where = i === 0 ? `${leg.station} station` : (state.to.name || "destination");
       const verb = leg.type === "walk" ? "Walk" : "Grab / drive";
       const dist = leg.km >= 0.05 ? `${leg.km} km` : null;
-      ul.append(stepRow(leg.type === "walk" ? "🚶" : "🚕", `${verb} to ${where}`, dist, fmtMin(leg.minutes), null, leg.type === "walk"));
+      ul.append(stepRow(leg.type === "walk" ? "footprints" : "car-taxi-front", `${verb} to ${where}`, dist, fmtMin(leg.minutes), null, leg.type === "walk"));
     } else if (leg.type === "transfer") {
-      ul.append(stepRow("🔁", `Change at ${leg.station}`, "Walk to the other platform", fmtMin(leg.minutes), null, true));
+      ul.append(stepRow("arrow-left-right", `Change at ${leg.station}`, "Walk to the other platform", fmtMin(leg.minutes), null, true));
     } else if (leg.type === "ride") {
-      const t = el("div", "tt");
-      const badge = el("span", "badge", leg.short);
+      const t = el("div", "font-medium");
+      const badge = el("span", "mr-1.5 inline-block rounded px-1.5 py-px text-[11px] font-semibold text-white", leg.short);
       badge.style.background = leg.color;
-      if (leg.color.toUpperCase() === "#FFCD00") badge.style.color = "#202124";
+      if (leg.color.toUpperCase() === "#FFCD00") badge.style.color = "#18181b";
       t.append(badge, leg.line_name);
       const desc = `${leg.from} → ${leg.to} · ${leg.stops} stop${leg.stops > 1 ? "s" : ""} · trains every ~${Math.round(leg.wait * 2)} min`;
-      ul.append(stepRow("🚆", t, desc, fmtMin(leg.minutes + leg.wait), leg.color, false));
+      ul.append(stepRow("train-front", t, desc, fmtMin(leg.minutes + leg.wait), leg.color, false));
     }
   });
   box.append(ul);
-  if (opt.feeder) box.append(el("p", "note", "The nearest station is far, so the trip includes a short Grab or car ride."));
-  if (p.weather.rain_mm >= 5 && opt.walk_minutes > 3) box.append(el("p", "note", "☔ Heavy rain: bring an umbrella for the walking parts."));
+  if (opt.feeder) box.append(note("The nearest station is far, so the trip includes a short Grab or car ride."));
+  if (p.weather.rain_mm >= 5 && opt.walk_minutes > 3) box.append(note("Heavy rain: bring an umbrella for the walking parts."));
 }
 
 function renderAll() {
   renderHero();
   renderCompare();
-  renderTimeMachine();
   renderDetail();
+  drawIcons();
   try { drawMap(); } catch (e) { console.error("map failed", e); }
 }
 
@@ -565,6 +537,7 @@ function selectMode(mode) {
   state.selected = mode;
   renderCompare();
   renderDetail();
+  drawIcons();
   try { drawMap(false); } catch (e) { console.error("map failed", e); }
 }
 
@@ -577,7 +550,6 @@ async function plan() {
     return;
   }
   const seq = ++planSeq;
-  stopPlay();
   $("results").classList.remove("hidden");
   $("results").classList.remove("collapsed");
   setError("");
@@ -643,6 +615,7 @@ function runDemo(name) {
 }
 
 function init() {
+  drawIcons();
   initMap();
   $("date").value = localDate(1);  // tomorrow
   $("fromInput").value = state.from.name;
@@ -652,7 +625,6 @@ function init() {
   $("go").addEventListener("click", plan);
   $("date").addEventListener("change", plan);
   $("time").addEventListener("change", plan);
-  $("play").addEventListener("click", togglePlay);
   $("backToRoute").addEventListener("click", fitRoute);
   document.querySelectorAll(".demo").forEach((b) => b.addEventListener("click", () => runDemo(b.dataset.demo)));
   $("swap").addEventListener("click", () => {

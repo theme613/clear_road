@@ -1,110 +1,127 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="h-full">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Clear Road</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.css">
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=8">
+  <!-- Tailwind CSS v4, no build step: scans the page (and JS-added classes) in the browser -->
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.3/dist/index.global.js"></script>
+  <style type="text/tailwindcss">
+    @theme {
+      --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+  </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@maplibre/maplibre-gl-leaflet@0.1.3/leaflet-maplibre-gl.min.js"></script>
+  <!-- Lucide: the icon set used by shadcn/ui -->
+  <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
 </head>
-<body>
-<div id="map"></div>
-<div id="mapOff" class="hidden">Map unavailable offline. Routes and times still work in the panel.</div>
+<body class="h-full overflow-hidden bg-zinc-200 font-sans text-sm text-zinc-900 antialiased">
+<div id="map" class="fixed inset-0 z-0 bg-[#e5e3df]"></div>
+<div id="mapOff" class="hidden fixed inset-0 flex items-center justify-center p-6 text-center text-zinc-500">
+  Map unavailable offline. Routes and times still work in the panel.
+</div>
 
-<!-- Floating map controls -->
-<div id="mapBadge" class="map-badge hidden" aria-live="polite"></div>
-<button id="backToRoute" class="back-btn hidden" type="button">⌖ Back to my route</button>
+<button id="backToRoute" type="button"
+  class="hidden fixed bottom-7 left-[calc(50%+220px)] z-[1001] -translate-x-1/2 inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-2 font-medium shadow-lg hover:bg-zinc-100 max-md:left-1/2 max-md:bottom-[calc(50vh+12px)]">
+  <i data-lucide="locate-fixed" class="size-4"></i>Back to my route
+</button>
 
-<div id="panel">
-  <section id="searchCard" class="card">
-    <div class="brand">
-      <div class="brand-logo">CR</div>
+<div id="panel" class="pointer-events-none fixed top-3 bottom-3 left-3 z-[1000] flex w-[420px] flex-col gap-2.5 *:pointer-events-auto max-md:top-2 max-md:right-2 max-md:bottom-auto max-md:left-2 max-md:w-auto">
+
+  <!-- Search card -->
+  <section id="searchCard" class="rounded-xl border border-zinc-200 bg-white p-3.5 shadow-lg max-md:p-2.5">
+    <div class="mb-3 flex items-center gap-2.5 max-md:hidden">
+      <div class="grid size-8 place-items-center rounded-lg bg-zinc-900 text-white"><i data-lucide="route" class="size-4"></i></div>
       <div>
-        <h1>Clear Road</h1>
-        <p>Predicts your trip before you leave: car or train, and when to go.</p>
+        <h1 class="text-base font-semibold tracking-tight">Clear Road</h1>
+        <p class="text-xs text-zinc-500">Predicts your trip before you leave: car or train, and when to go.</p>
       </div>
     </div>
 
-    <div class="od">
-      <div class="dots"><span class="dot-from"></span><span class="dot-mid"></span><span class="dot-mid"></span><span class="dot-mid"></span><span class="dot-to"></span></div>
-      <div class="field">
-        <input id="fromInput" placeholder="Choose starting point" autocomplete="off" aria-label="From">
-        <div id="fromList" class="suggest hidden" role="listbox"></div>
+    <div class="grid grid-cols-[18px_1fr_36px] items-center gap-2">
+      <div class="row-span-2 flex flex-col items-center gap-[3px]">
+        <span class="size-2.5 rounded-full border-[2.5px] border-zinc-900"></span>
+        <span class="size-[3px] rounded-full bg-zinc-400"></span>
+        <span class="size-[3px] rounded-full bg-zinc-400"></span>
+        <span class="size-[3px] rounded-full bg-zinc-400"></span>
+        <span class="size-2.5 -rotate-45 rounded-[50%_50%_50%_0] bg-red-600"></span>
       </div>
-      <button id="swap" title="Swap start and destination" aria-label="Swap">⇅</button>
-      <div class="field">
-        <input id="toInput" placeholder="Choose destination" autocomplete="off" aria-label="To">
-        <div id="toList" class="suggest hidden" role="listbox"></div>
+      <div class="relative">
+        <input id="fromInput" placeholder="Choose starting point" autocomplete="off" aria-label="From"
+          class="h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 outline-none transition focus:border-zinc-400 focus:ring-3 focus:ring-zinc-400/25 max-md:h-9">
+        <div id="fromList" role="listbox" class="hidden absolute inset-x-0 top-[calc(100%+4px)] z-20 max-h-[300px] overflow-y-auto rounded-[10px] border border-zinc-200 bg-white p-1 shadow-lg"></div>
+      </div>
+      <button id="swap" title="Swap start and destination" aria-label="Swap"
+        class="col-start-3 row-span-2 row-start-1 grid size-9 place-items-center rounded-lg border border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900">
+        <i data-lucide="arrow-up-down" class="size-4"></i>
+      </button>
+      <div class="relative">
+        <input id="toInput" placeholder="Choose destination" autocomplete="off" aria-label="To"
+          class="h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 outline-none transition focus:border-zinc-400 focus:ring-3 focus:ring-zinc-400/25 max-md:h-9">
+        <div id="toList" role="listbox" class="hidden absolute inset-x-0 top-[calc(100%+4px)] z-20 max-h-[300px] overflow-y-auto rounded-[10px] border border-zinc-200 bg-white p-1 shadow-lg"></div>
       </div>
     </div>
 
-    <div class="when">
-      <label>Date <input id="date" type="date"></label>
-      <label>Leave at <input id="time" type="time" step="900" value="08:00"></label>
-      <button id="go">Predict</button>
+    <div class="mt-2.5 flex items-end gap-2">
+      <label class="flex min-w-0 flex-1 flex-col gap-1 text-xs font-medium text-zinc-500">Date
+        <input id="date" type="date" class="h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm text-zinc-900 outline-none focus:border-zinc-400 focus:ring-3 focus:ring-zinc-400/25 max-md:h-9 max-md:px-2">
+      </label>
+      <label class="flex min-w-0 flex-1 flex-col gap-1 text-xs font-medium text-zinc-500">Leave at
+        <input id="time" type="time" step="900" value="08:00" class="h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm text-zinc-900 outline-none focus:border-zinc-400 focus:ring-3 focus:ring-zinc-400/25 max-md:h-9 max-md:px-2">
+      </label>
+      <button id="go" class="h-10 whitespace-nowrap rounded-lg bg-zinc-900 px-4 font-medium text-white hover:bg-zinc-800 disabled:cursor-wait disabled:opacity-60 max-md:h-9 max-md:px-3">Predict</button>
     </div>
 
-    <div id="demos" class="demos">
-      <span class="demos-label">Try:</span>
-      <button type="button" class="demo" data-demo="rush">🌅 Rush hour</button>
-      <button type="button" class="demo" data-demo="rain">🌧 Rainy evening</button>
-      <button type="button" class="demo" data-demo="sunday">☀️ Sunday</button>
+    <div id="demos" class="mt-3 flex flex-wrap items-center gap-1.5">
+      <span class="mr-0.5 text-xs text-zinc-500">Try</span>
+      <button type="button" data-demo="rush" class="demo inline-flex h-7 items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-2.5 text-xs font-medium hover:bg-zinc-100"><i data-lucide="sunrise" class="size-3.5 text-zinc-500"></i>Rush hour</button>
+      <button type="button" data-demo="rain" class="demo inline-flex h-7 items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-2.5 text-xs font-medium hover:bg-zinc-100"><i data-lucide="cloud-rain" class="size-3.5 text-zinc-500"></i>Rainy evening</button>
+      <button type="button" data-demo="sunday" class="demo inline-flex h-7 items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-2.5 text-xs font-medium hover:bg-zinc-100"><i data-lucide="sun" class="size-3.5 text-zinc-500"></i>Sunday</button>
     </div>
   </section>
 
-  <section id="results" class="card hidden">
-    <button id="sheetHandle" aria-label="Expand or collapse"><span></span></button>
-    <div id="status" class="status hidden"></div>
-    <div id="error" class="error hidden"></div>
+  <!-- Results card (bottom sheet on phones) -->
+  <section id="results" class="hidden min-h-0 flex-1 overflow-y-auto rounded-xl border border-zinc-200 bg-white pb-3 shadow-lg transition-[max-height] max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:max-h-[50vh] max-md:rounded-b-none max-md:rounded-t-2xl max-md:pb-5">
+    <button id="sheetHandle" aria-label="Expand or collapse" class="block w-full pt-2 pb-0.5 md:hidden">
+      <span class="mx-auto block h-1 w-9 rounded-full bg-zinc-200"></span>
+    </button>
+    <div id="status" class="hidden px-4 py-3.5 text-zinc-500"></div>
+    <div id="error" class="hidden m-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-red-600"></div>
     <div id="out" class="hidden">
-      <!-- 1. Hero prediction -->
-      <div id="hero" class="hero"></div>
+      <div id="hero"></div>
+      <div id="compare" class="px-3 py-1"></div>
 
-      <!-- 2. Car vs train vs bus -->
-      <div id="compare" class="compare"></div>
-
-      <!-- 3. Time machine -->
-      <div class="tm">
-        <div class="tm-head">
-          <div>
-            <div class="tm-title">Leave-time forecast</div>
-            <div class="tm-sub">Predicted door-to-door minutes · tap a time</div>
-          </div>
-          <button id="play" class="play" type="button">▶ Play</button>
-        </div>
-        <div id="strip" class="strip"></div>
-        <div class="tm-legend"><span><i class="lg-car"></i>Car</span><span><i class="lg-train"></i>Train</span><span>★ best time</span></div>
-      </div>
-
-      <!-- 4. Route details -->
-      <details class="more" open>
-        <summary id="detailTitle">Route details</summary>
-        <div id="detail" class="section"></div>
+      <details class="mx-3 mt-2 border-t border-zinc-200 px-1 pt-3 pb-0.5" open>
+        <summary id="detailTitle" class="cursor-pointer font-semibold">Route details</summary>
+        <div id="detail" class="py-1.5"></div>
       </details>
 
-      <!-- 5. What-if -->
-      <details class="more">
-        <summary>What if it rains?</summary>
-        <div class="section">
-          <div class="rainrow">
+      <details class="mx-3 mt-2 border-t border-zinc-200 px-1 pt-3 pb-0.5">
+        <summary class="cursor-pointer font-semibold">What if it rains?</summary>
+        <div class="py-1.5">
+          <div class="my-1.5 flex items-center gap-2.5 text-[13px] text-zinc-500">
             <span>0</span>
-            <input id="rain" type="range" min="0" max="30" step="1" value="0" aria-label="What-if rain in mm">
+            <input id="rain" type="range" min="0" max="30" step="1" value="0" aria-label="What-if rain in mm" class="flex-1 accent-zinc-900">
             <span id="rainLabel">live forecast</span>
           </div>
-          <button id="rainReset" class="linkbtn hidden">Back to live forecast</button>
+          <button id="rainReset" class="hidden cursor-pointer text-[13px] underline">Back to live forecast</button>
         </div>
       </details>
 
-      <p class="foot">Car traffic: our model, trained on simulated KL traffic. Train: official Rapid KL
+      <p class="px-4 pt-3 text-[11px] leading-relaxed text-zinc-500">Car traffic: our model, trained on simulated KL traffic. Train: official Rapid KL
         timetable. Bus: estimate. Weather Open-Meteo · roads OSRM · search Photon · map © OpenStreetMap via OpenFreeMap.</p>
     </div>
   </section>
 </div>
 
-<script src="app.js?v=4"></script>
+<script src="app.js?v=8"></script>
 </body>
 </html>

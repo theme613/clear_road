@@ -59,13 +59,6 @@ def v2_checks(client: TestClient) -> None:
     check("weekday 08:00 into KLCC: train recommended", rush.get("recommended") == "train")
     check("plan saved_minutes >= 0", rush.get("saved_minutes", -1) >= 0)
     check("plan has 17 slots", len(rush.get("slots", [])) == 17)
-    check("time machine data: every slot has mult and rain",
-          all("mult" in s and "rain" in s for s in rush.get("slots", [])))
-    car = next(o for o in rush["options"] if o["mode"] == "car")
-    check("time machine data: car segments have weight w",
-          bool(car["segments"]) and all("w" in s for s in car["segments"]))
-    mults = [s["mult"] for s in rush["slots"]]
-    check("time machine: rush hour (08:00) busier than 06:00", mults[8] > mults[0])
     train = next(o for o in rush["options"] if o["mode"] == "train")
     check("train legs include a ride with a line colour",
           any(l["type"] == "ride" and l["color"].startswith("#") for l in train["legs"]))

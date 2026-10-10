@@ -12,14 +12,17 @@ Valley, pick a date and time (for example tomorrow 08:00), and Clear Road compar
 What makes it different from a normal map app: everything is a **prediction for the time you
 will travel**, not the traffic right now.
 
-- **Prediction card**: "🚆 Take the train · Leave 08:00 → arrive 08:51 · saves 12 min vs driving",
+- **Prediction card**: "Take the train · Leave 08:00 → Arrive 08:51 · Saves 12 min vs driving",
   plus a tip when leaving at another time is much faster.
 - **Car vs train vs bus rows** with predicted minutes and arrival times; tap one to show it on the map.
-- **Time machine (leave-time forecast)**: car and train minutes for every 15 min, 2 hours before
-  and after your time. Press ▶ Play and the map animates the predicted traffic on the car route
-  (green → red as rush hour builds) while a badge shows which mode wins at each time.
 - **Back to my route** button appears when you pan or zoom away from the route.
-- **Demo chips** for presentations: 🌅 Rush hour, 🌧 Rainy evening, ☀️ Sunday.
+- **Demo chips** for presentations: Rush hour, Rainy evening, Sunday.
+
+UI: plain HTML/JS (no build) styled with **Tailwind CSS v4** (the `@tailwindcss/browser` CDN build,
+which turns the class names into CSS in the browser), [Lucide](https://lucide.dev) icons (the icon
+set used by shadcn/ui) and the Inter font. Colour classes per mode are in `MODE_INFO` in
+`app/static/app.js`; `app/static/style.css` only holds map markers, the walking-line pattern and
+the phone bottom-sheet rules. If the CDNs cannot load, the page still works, just unstyled.
 
 100% free: no API keys, no sign-up, no database. Needs Python 3.10 or newer.
 

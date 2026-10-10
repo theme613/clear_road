@@ -71,10 +71,9 @@ def traffic_segments(coords: list[list[float]], mult: float, n: int = 40) -> lis
         chunk = coords[i:i + step + 1]
         mid = chunk[len(chunk) // 2]
         dc = haversine_km(mid[0], mid[1], *KLCC)
-        w = min(max(1.5 - dc / 25, 0.3), 1.5)  # traffic is worse closer to the city centre
-        local = 1 + (mult - 1) * w
+        local = 1 + (mult - 1) * min(max(1.5 - dc / 25, 0.3), 1.5)  # worse near the centre
         color = next(c for limit, c in TRAFFIC_COLORS if local < limit)
-        out.append({"coords": chunk, "color": color, "w": round(w, 3)})
+        out.append({"coords": chunk, "color": color})
     return out
 
 
@@ -153,8 +152,7 @@ def plan_trip(a: tuple[float, float], b: tuple[float, float], day: Date, hour: f
     for h, ev in zip(hours, evals):
         slots.append({"time": fmt_time(h), "car": ev["car"],
                       "train": ev["train"]["minutes"] if ev["train"] else None,
-                      "bus": ev["bus"]["minutes"] if ev["bus"] else None,
-                      "mult": round(ev["mult"], 3), "rain": round(ev["rain"], 1)})
+                      "bus": ev["bus"]["minutes"] if ev["bus"] else None})
     # Best time: fastest of car/train; ties within 2 min go to the slot closest to the chosen time
     def best_of(s: dict) -> tuple[float, str]:
         vals = [(s["car"], "car")] + ([(s["train"], "train")] if s["train"] else [])
@@ -175,6 +173,5 @@ def plan_trip(a: tuple[float, float], b: tuple[float, float], day: Date, hour: f
         "options": options, "recommended": rec, "saved_minutes": saved,
         "explanation": explain(rec, chosen, car_opt, train_opt, time_str, saved, best_dep),
         "slots": slots, "best_departure": best_dep,
-        "traffic_colors": [[limit, c] for limit, c in TRAFFIC_COLORS],
         "sources": {"route": route["source"], "rain": wsource, "traffic": msource},
     }
