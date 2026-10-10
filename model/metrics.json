@@ -1,0 +1,8 @@
+{
+  "baseline_mae": 5.346,
+  "model_mae": 1.659,
+  "within_5min_pct": 96.7,
+  "n_train": 24820,
+  "n_test": 6205,
+  "test_start_date": "2026-07-23"
+}

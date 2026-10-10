@@ -1,0 +1,7 @@
+[
+  {"id": "subang_klcc", "name": "Subang Jaya to KLCC", "road": "Federal Highway", "base_minutes": 35, "peak_hour": 8.0, "peak_mult": 1.8, "check_lat": 3.0950, "check_lon": 101.6000},
+  {"id": "puchong_midvalley", "name": "Puchong to Mid Valley", "road": "LDP", "base_minutes": 30, "peak_hour": 7.75, "peak_mult": 1.7, "check_lat": 3.0420, "check_lon": 101.6180},
+  {"id": "shahalam_klsentral", "name": "Shah Alam to KL Sentral", "road": "Federal Highway", "base_minutes": 40, "peak_hour": 8.0, "peak_mult": 1.9, "check_lat": 3.0850, "check_lon": 101.5500},
+  {"id": "cheras_klcc", "name": "Cheras to KLCC", "road": "Cheras-Kajang", "base_minutes": 30, "peak_hour": 8.25, "peak_mult": 1.7, "check_lat": 3.0900, "check_lon": 101.7700},
+  {"id": "damansara_bangsar", "name": "Damansara to Bangsar", "road": "SPRINT Highway", "base_minutes": 25, "peak_hour": 8.0, "peak_mult": 1.6, "check_lat": 3.1350, "check_lon": 101.6350}
+]
